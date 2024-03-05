@@ -1,0 +1,73 @@
+stages:
+  - clone
+  - build
+  - test
+  - deploy
+
+variables:
+  MAVEN_CLI: "--batch-mode"
+  #  MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
+
+
+cache:
+  paths:
+    - .m2/repository/
+
+clone_job:
+  stage: clone
+  script:
+    - git clone -b master http://192.168.40.11/root/backend.git
+
+Build-job:
+  stage: build
+  script:
+    - echo "Cleaning and installing dependencies..."
+    - mvn $MAVEN_CLI clean install
+    - echo "Compilation and installation complete successfully!!."
+
+unit-test-job:
+  stage: test
+  script:
+    - echo "Running unit tests... This will take about 60 seconds."
+    - mvn $MAVEN_CLI test
+    - echo "Test complete successfully!!."
+
+
+sonarqube_job:
+  stage: test
+  image: maven:3.6.3-jdk-11
+  variables:
+    SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"  # Defines the location of the analysis task cache
+    GIT_DEPTH: "0"  # Tells git to fetch all the branches of the project, required by the analysis task
+    SONAR_HOST_URL: "http://192.168.40.11:9000"
+    SONAR_TOKEN: "sqp_7873d0227c2d1ee31d092ee9aabe2153c7351012"
+  cache:
+    key: "${CI_JOB_NAME}"
+    paths:
+      - .sonar/cache
+  script:
+    - mvn verify sonar:sonar -Dsonar.projectKey=root_backend_AY4JJK46EDC8j-7s3QUV
+  allow_failure: true
+
+
+Docker-build-image:
+  stage: deploy
+  script:
+    - echo "Building Docker image..."
+    - docker build -f Dockerfile --force-rm -t 192.168.40.9:5000/spring:new .
+    - echo "Image built successfully!!."
+
+Docker-push-image:
+  stage: deploy
+  script:
+    - echo "Pushing Docker image..."
+    - docker push 192.168.40.9:5000/spring:new
+    - echo "Image pushed successfully!!."
+
+deploy-job:
+  environment:
+    name: staging
+  stage: deploy
+  script:
+    - docker-compose -f docker-compose.yml up -d
+    - echo "Application successfully deployed!!."
